@@ -9,8 +9,11 @@
 @site: 
 @software: PyCharm
 @file: demo.py
-@time: 2018/2/2 下午2:09
+@time: 2018/2/2 下午4:03
 """
+#!/usr/bin/env python
+# encoding: utf-8
+
 import datetime
 import os
 
@@ -18,20 +21,24 @@ import fcntl
 import scrapy
 from scrapy import Selector
 
+from tools.db_helper import *
+
+from tools.db_helper import DbHelper
 
 
-class DemoSpider(scrapy.Spider):
-    name = "demo"
+class TitleSpider(scrapy.Spider):
+    name = "title"
     dir_path = '%s/../html/' % os.path.dirname(os.path.realpath(__file__))
 
     def start_requests(self):
+
         for page in range(1, 20):
             url = 'https://www.jianshu.com/u/c3f08a5fb726?page=%s' % str(page)
             yield scrapy.Request(url=url, callback=self.parse, cookies=self.format_cookie(), headers={
                 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/63.0.3239.132 Safari/537.36'})
 
     def parse(self, response):
-        self.download(response=response)
+        self.craw(response=response)
 
     def write(self, data):
         """
@@ -75,3 +82,36 @@ class DemoSpider(scrapy.Spider):
         with open(filename, 'wb') as f:
             f.write(response.body)
         self.log('Saved file %s' % filename)
+
+    def craw(self, response):
+        """
+        数据处理和入库
+        :param response:
+        :return:
+        """
+        hxs = Selector(response=response).xpath('//div[@id="list-container"]/ul/li')
+        for item in hxs:
+            article_id = item.xpath('@data-note-id').extract()
+            if not article_id:
+                continue
+            article_title_list = item.xpath('./div[@class="content"]/a[@class="title"]/text()').extract()
+            article_url_list = item.xpath('./div[@class="content"]/a[@class="title"]/@href').extract()
+            article_cover_list = item.xpath('./a[@class="wrap-img"]/img/@src').extract()
+            article_abstract_list = item.xpath('./div[@class="content"]/p[@class="abstract"]/text()').extract()
+            cover_img = ''
+            print()
+            if article_cover_list:
+                cover_img = "https:%s" % article_cover_list[0].split('?')[0]
+
+            row = {
+                "uuid": article_id[0],
+                "url": 'https://www.jianshu.com%s' % article_url_list[0],
+                "cover_image": cover_img,
+                "description": article_abstract_list[0],
+                "title": article_title_list[0].strip(),
+                "create_time": datetime.datetime.now().strftime('%Y-%m-%d %H:%d:%m')
+
+            }
+            with DbHelper() as conn:
+                insert_row(conn, 'article', row)
+
