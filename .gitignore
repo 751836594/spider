@@ -50,4 +50,5 @@ crashlytics.properties
 crashlytics-build.properties
 fabric.properties
 
-env
+src/env
+docker
